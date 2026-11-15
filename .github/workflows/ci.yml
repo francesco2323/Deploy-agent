@@ -43,3 +43,43 @@ jobs:
           test "$(/tmp/v/bin/deploy-agent --version)" = "deploy-agent $(python -c 'import sys;sys.path.insert(0,"src");import deploy_agent;print(deploy_agent.__version__)')"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: dist, path: dist/, retention-days: 14 }
+
+  image-scan:
+    # Builds the CLI image and scans it on every PR; fails on HIGH/CRITICAL findings that have a fix.
+    # Findings are in the job summary and (same-repo PRs) the Security tab. Nothing is pushed here.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write            # SARIF upload (Security > Code scanning)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build the CLI image
+        run: docker build -t deploy-agent:scan --build-arg VERSION=ci .
+      - name: Trivy (JSON for the gate and summary)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          version: v0.69.3                 # known-safe binary; v0.69.4 was malicious
+          image-ref: deploy-agent:scan
+          format: json
+          output: trivy.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"                   # the gate is scripts/trivy_summary.py, so the report is always written
+      - name: Summary + gate
+        run: python3 scripts/trivy_summary.py trivy.json "$GITHUB_STEP_SUMMARY"
+      - name: Trivy (SARIF for code scanning)
+        if: always() && hashFiles('trivy.json') != ''
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          version: v0.69.3
+          image-ref: deploy-agent:scan
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: "0"
+      - name: Upload to the Security tab
+        if: always() && hashFiles('trivy.sarif') != '' && github.event.pull_request.head.repo.fork != true
+        continue-on-error: true            # needs Code scanning enabled on the repo; the summary is the source of truth
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with: { sarif_file: trivy.sarif, category: trivy-image }
