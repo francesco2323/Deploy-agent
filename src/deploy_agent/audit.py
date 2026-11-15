@@ -6,6 +6,8 @@ import json
 import time
 from pathlib import Path
 
+from . import __version__
+
 _GENESIS = "0" * 64
 
 
@@ -24,7 +26,7 @@ class Audit:
                 self.prev = json.loads(lines[-1])["hash"]
 
     def log(self, event: str, **data) -> None:
-        rec = {"ts": round(time.time(), 3), "event": event, "data": data, "prev": self.prev}
+        rec = {"ts": round(time.time(), 3), "version": __version__, "event": event, "data": data, "prev": self.prev}
         rec["hash"] = _h(rec)
         with self.path.open("a") as f:
             f.write(json.dumps(rec) + "\n")

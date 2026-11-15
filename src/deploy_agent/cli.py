@@ -12,6 +12,7 @@ from pathlib import Path
 
 import yaml
 
+from . import __version__
 from .audit import Audit
 from .gitops import Argo
 from .runner import CmdError, run
@@ -185,6 +186,7 @@ def cmd_audit_verify(a, reg) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="deploy-agent")
+    p.add_argument("--version", action="version", version=f"deploy-agent {__version__}")
     p.add_argument("--registry", default="config/stacks.yaml")
     p.add_argument("--root", default=".", help="repo root containing stack paths")
     p.add_argument("--out", default="out")

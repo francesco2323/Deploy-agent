@@ -25,6 +25,14 @@ Deterministic AWS/Terraform + GitOps deploy agent. Same CLI for local, Floci (em
 - Dashboard layout: left sidebar (Stacks, Images, Logs are live; the other entries are shown as `soon`, never dead links), environment cards instead of pills (status banner from the last run; the selected card adds the finding count), and on docker apps a **How it runs** whiteboard (left column): Dockerfile -> build/run -> Docker host -> bridge network -> container (base, PID 1, user), volumes, port mapping `Host:P -> Container:P`, browser. Fed by `GET /api/topology` (`dockerfile.topology`): read only from the Dockerfile + registry (`port`, `health_path`), nothing guessed; warns on missing EXPOSE/HEALTHCHECK, root user, shell-form CMD.
 - Image explainer: `GET /api/explain` (Image tab) renders Dockerfile stages/layers in plain language, with sizes from `docker history` when the Dockerfile matches the last build.
 
+## Versioning & release
+- SemVer, `0.y.z` until fixer catalog / `/api/*` shapes settle. Single source: `deploy_agent.__version__` (`pyproject.toml` is dynamic). Shown in `--version`, the dashboard sidebar, and every audit record (`version` key; old records without it still verify).
+- Every PR: add a `CHANGELOG.md` entry under `[Unreleased]`. To release: PR that moves it to `[X.Y.Z]` and bumps `__version__` -> merge to `main` -> `git tag -a vX.Y.Z && git push origin vX.Y.Z`. `release.yml` refuses a tag that != `__version__`, is not on `main`, or has no changelog entry, then builds wheel+sdist and creates the GitHub Release. Nothing is published to PyPI or a registry.
+- Never push to `main`; work on a branch, open a PR. `ci.yml` (`test` x py3.11-3.13, `build`) must pass. Tests are hermetic: the sample app lives in `tests/fixtures/sample-app` (deliberately bad Dockerfile, do not "fix" it).
+
+## No real cloud
+CI never touches AWS or anything billable: no OIDC, no `configure-aws-credentials`, no role ARNs in workflows (`tests/test_workflows.py` enforces it). Terraform plan/apply in CI runs against **Floci** (`floci/floci`, free MIT AWS emulator) as a service container (`floci.yml`); state is ephemeral. Images: only `release.yml` pushes, only to Docker Hub, only on a `vX.Y.Z` tag, tagged `X.Y.Z` + `sha-<commit>` (never `latest`), after a Trivy gate; it needs repo variable `DOCKERHUB_USERNAME` + secret `DOCKERHUB_TOKEN` and skips cleanly without them. The dashboard's own Docker pipeline stays local-only. Real-AWS apply was removed on purpose; reintroduce it only as a deliberate change.
+
 ## Change protocol
 After ANY change to this repo: update this file (invariants/commands), the README runbook, and any agent/skill definitions or global config (`~/.claude/CLAUDE.md`, `~/.claude.json` agents) that reference these commands or invariants. Add/adjust a gate test for every new rule.
 
