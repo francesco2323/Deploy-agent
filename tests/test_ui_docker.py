@@ -131,3 +131,44 @@ def test_dashboard_shows_the_version_and_leaves_no_placeholder():
     html = PAGE.replace("@@VERSION@@", __version__)
     assert "deploy-agent v@@VERSION@@" in PAGE and f"deploy-agent v{__version__}" in html
     assert "@@VERSION@@" not in html
+
+
+def test_sidebar_views_are_read_only_and_remove_only_agent_containers(tmp_path):
+    from deploy_agent.audit import Audit
+    srv, port, root, fake = serve(tmp_path)
+    try:
+        c = call(port, "/api/sys/containers")[1]
+        assert c["ok"] and c["items"][0]["agent"] is True
+        assert [n["name"] for n in call(port, "/api/sys/networks")[1]["items"]] == ["bridge", "host"]
+        assert call(port, "/api/sys/volumes")[1]["items"][0]["name"] == "pgdata"
+        assert call(port, "/api/sys/nope")[0] == 404
+        assert call(port, "/api/sys/containers", token="bad")[0] == 403
+        assert call(port, "/api/container/remove", "POST", {"name": "web"})[0] == 400
+        assert not fake.subs("rm")
+        assert call(port, "/api/container/remove", "POST", {"name": "deploy-agent-sample-1700000000"})[0] == 200
+        assert fake.subs("rm") == [["docker", "rm", "-f", "deploy-agent-sample-1700000000"]]
+        act = call(port, "/api/activity")[1]
+        assert act["verified"]["dashboard"] is True and act["items"][0]["event"] == "container.removed"
+        assert Audit.verify(tmp_path / "out" / "ui-events.jsonl")
+        assert call(port, "/api/activity?q=zzz")[1]["items"] == []
+    finally:
+        srv.shutdown()
+
+
+def test_applying_a_fix_is_recorded_in_activity(tmp_path, monkeypatch):
+    srv, port, root, fake = serve(tmp_path)
+    try:
+        call(port, "/api/run", "POST", {"app": "a"})
+        wait(port, lambda r: r["status"] != "running")
+        assert call(port, "/api/fix", "POST", {"app": "a", "fix_id": "docker-pin-base"})[0] == 200
+        ev = [i["event"] for i in call(port, "/api/activity")[1]["items"]]
+        assert "fix.applied" in ev and "docker.run" in ev
+    finally:
+        srv.shutdown()
+
+
+def test_page_has_the_system_views_wired_in():
+    from deploy_agent.ui import PAGE
+    for k in ("containers", "volumes", "networks", "activity"):
+        assert f",'{k}']" in PAGE and f"{k}:'" in PAGE
+    assert 'id=syspage' in PAGE and 'id=stackpage' in PAGE

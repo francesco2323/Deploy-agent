@@ -18,7 +18,8 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 from . import dockerfile as dfile
-from . import __version__, dockerflow, remediate
+from . import __version__, dockerflow, inventory, remediate
+from .audit import Audit
 from .gitops import Argo
 from .pipeline import Recorder, execute_apply, execute_pipeline, new_run, skeleton, snapshot
 from .runner import run
@@ -79,6 +80,18 @@ def make_server(reg, root: Path, out_root: Path, specs_dir: Path, make_deployer,
     runs: dict[str, dict] = {}
     state = {"counter": 0}
     lock = threading.Lock()
+    alock = threading.Lock()
+
+    def note(event: str, **data) -> None:
+        """Dashboard actions go to their own hash chain: appending to the deployer's audit.jsonl would fork its chain."""
+        try:
+            with alock:
+                Audit(out_root / "ui-events.jsonl").log(event, **data)
+        except OSError:
+            pass                                   # an unwritable log must never break the action itself
+
+    def docker_run():
+        return check_run or run
 
     def busy() -> bool:
         return any(r["status"] == "running" for r in runs.values())
@@ -173,6 +186,18 @@ def make_server(reg, root: Path, out_root: Path, specs_dir: Path, make_deployer,
             d = {k: v[0] for k, v in q.items()}
             if u.path == "/api/stacks":
                 return self._send(200, matrix())
+            if u.path.startswith("/api/sys/"):
+                kind = u.path.rsplit("/", 1)[1]
+                if kind not in ("containers", "volumes", "networks"):
+                    return self._send(404, {"error": "unknown view"})
+                return self._send(200, inventory.listing(kind, docker_run()))
+            if u.path == "/api/activity":
+                try:
+                    lim = int(d.get("limit", 300))
+                except ValueError:
+                    lim = 300
+                return self._send(200, inventory.read_events({"deploy": out_root / "audit.jsonl", "dashboard": out_root / "ui-events.jsonl"},
+                                                             lim, d.get("q", "")))
             t = resolve(d)
             if t is None:
                 return self._send(404, {"error": "unknown stack or app"})
@@ -243,6 +268,16 @@ def make_server(reg, root: Path, out_root: Path, specs_dir: Path, make_deployer,
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
             except ValueError:
                 return self._send(400, {"error": "bad json"})
+            if u.path == "/api/container/remove":
+                name = body.get("name", "")
+                if not inventory.is_agent_container(name):
+                    return self._send(400, {"error": "only containers started by deploy-agent (deploy-agent-...) can be removed here"})
+                try:
+                    res = inventory.remove_container(name, docker_run())
+                except RuntimeError as e:
+                    return self._send(409, {"error": str(e)})
+                note("container.removed", name=name)
+                return self._send(200, res)
             t = resolve(body)
             if t is None:
                 return self._send(404, {"error": "unknown stack or app"})
@@ -274,6 +309,7 @@ def make_server(reg, root: Path, out_root: Path, specs_dir: Path, make_deployer,
                             res = {"applied": done}
                     except remediate.FixError as e:
                         return self._send(409, {"error": str(e)})
+                    note("fix.undone" if u.path == "/api/fix/undo" else "fix.applied", target=st.name, fixes=res.get("applied", ""))
                     try:
                         start_recheck(kind, st)
                     except Exception as e:
@@ -294,6 +330,7 @@ def make_server(reg, root: Path, out_root: Path, specs_dir: Path, make_deployer,
                         dockerflow.execute_docker_pipeline(r, rec, st, root, out_root, check_run or run, which or shutil.which)
                     except Exception as e:
                         rec.fail(f"{type(e).__name__}: {e}")
+                    note("docker.run", app=st.name, status=r.get("status", ""), ref=r.get("ref", ""))
                 threading.Thread(target=work_d, daemon=True).start()
                 return self._send(202, {"started": True, "id": r["id"]})
 
@@ -397,6 +434,9 @@ table.res{width:100%;border-collapse:collapse}table.res td,table.res th{text-ali
 .side a{display:flex;gap:10px;align-items:center;padding:7px 10px;border-radius:6px;color:var(--mu);font-size:14px;cursor:pointer}
 .side a:hover{background:var(--hv);color:var(--tx)}.side a.on{background:var(--hv);color:var(--tx);font-weight:600}
 .side a.off{opacity:.45;cursor:default}.side a.off:hover{background:none;color:var(--mu)}
+.sys h2{margin:0 0 4px;font-size:20px}.sys .tools{display:flex;gap:8px;align-items:center;margin:10px 0}.sys input{background:var(--sub);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;color:var(--tx);min-width:240px}
+.sys table{width:100%;border-collapse:collapse;font-size:13px}.sys th{text-align:left;color:var(--mu);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--bd)}.sys td{padding:6px 8px;border-bottom:1px solid var(--bd);vertical-align:top;word-break:break-word}
+.sys .tag2{border:1px solid var(--bd);border-radius:999px;padding:0 7px;font-size:11px}.sys .empty{padding:24px;color:var(--mu);border:1px dashed var(--bd);border-radius:8px}.sys button.sm{font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--bd);background:var(--sub);color:var(--tx);cursor:pointer}.sys button.danger{border-color:#c0392b;color:#c0392b}
 .side .ver{margin-top:auto;padding:8px 10px;font-size:11px;color:var(--mu)}
 .side a i{font-style:normal;width:18px;text-align:center}.side .soon{margin-left:auto;font-size:10px;border:1px solid var(--bd);border-radius:999px;padding:0 6px}
 .envs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:14px 0}
@@ -416,6 +456,7 @@ table.res{width:100%;border-collapse:collapse}table.res td,table.res th{text-ali
 <div class=shell><nav class=side id=side aria-label="Sections"></nav><div class=main>
 <div class=top><b>deploy-agent</b><span class=mu id=repo></span><span style=flex:1></span><button class=go id=runbtn>Run pipeline</button></div>
 <div class=wrap>
+<div id=syspage style="display:none"></div><div id=stackpage>
 <h1 id=title>Pipeline</h1><div id=sub class=mu style="margin-top:4px"></div>
 <div class=envs id=matrix></div>
 <div class=graph id=graph></div>
@@ -425,11 +466,11 @@ table.res{width:100%;border-collapse:collapse}table.res td,table.res th{text-ali
   <div class=tabs><button data-tab=logs class=on>Logs</button><button data-tab=code>Code</button><button data-tab=argo id=argotab style="display:none">ArgoCD</button><button data-tab=image id=imgtab style="display:none">Image</button></div>
   <div id=appr></div><div id=jobview></div><div id=codeview style="display:none"></div><div id=argoview style="display:none"></div><div id=imgview class=img style="display:none"></div>
  </section>
-</div></div>
+</div></div></div>
 </div></div>
 <script>
 const T=new URLSearchParams(location.search).get('t');const $=id=>document.getElementById(id);
-const S={tpKey:'',kind:'tf',fixes:null,fixKey:'',fixErr:'',explain:null,exKey:'',stack:null,stacks:[],data:null,sel:'checks',tab:'logs',open:{},fold:{},tree:null,file:null,last:'',treeKey:'',apprKey:'',cur:null};
+const S={page:null,tpKey:'',kind:'tf',fixes:null,fixKey:'',fixErr:'',explain:null,exKey:'',stack:null,stacks:[],data:null,sel:'checks',tab:'logs',open:{},fold:{},tree:null,file:null,last:'',treeKey:'',apprKey:'',cur:null};
 const RANK={critical:4,high:3,error:3,medium:2,warning:2,low:1,notice:1,info:0};
 const api=(p,o={})=>fetch(p+(p.includes('?')?'&':'?')+'t='+T,{...o,headers:{'X-Token':T,'Content-Type':'application/json'}}).then(r=>r.json().then(j=>({ok:r.ok,j})));
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -518,10 +559,30 @@ const BAN={success:'All checks passed',failure:'Failed: open the failing job bel
 function envCard(m){const s=BAN[m.status]?m.status:'idle',sel=m.name===S.stack;
  const n=sel&&S.data&&S.data.checks?S.data.checks.reduce((a,c)=>a+c.findings.length,0):0;
  return `<div class="env ${sel?'on':''}" data-s="${esc(m.name)}" data-kind="${esc(m.kind)}" role=button tabindex=0><div class=hd>${ic(s==='idle'?'pending':s)}<span>${esc(m.name)}</span><span class=tag>${esc(m.env)}</span><span class=tag>${m.kind==='docker'?'docker':'terraform'}</span></div><div class="ban ${s}">${BAN[s]}${n?' · '+n+' finding'+(n==1?'':'s'):''}</div></div>`}
-const NAV=[['▦','Dashboard'],['▢','Containers'],['≣','Logs','logs'],['>','Shell'],['≋','Stacks','stacks'],['▣','Images','images'],['▭','Volumes'],['⌘','Networks'],['⇣','Registry'],['∿','Activity'],['◷','Schedules'],['⚙','Settings']];
-function renderSide(){const cur=S.kind==='docker'?'images':'stacks';
+const NAV=[['▦','Dashboard'],['▢','Containers','containers'],['≣','Logs','logs'],['>','Shell'],['≋','Stacks','stacks'],['▣','Images','images'],['▭','Volumes','volumes'],['⌘','Networks','networks'],['⇣','Registry'],['∿','Activity','activity'],['◷','Schedules'],['⚙','Settings']];
+const SYS={containers:'Containers',volumes:'Volumes',networks:'Networks',activity:'Activity'};
+function renderSide(){const cur=S.page||(S.kind==='docker'?'images':'stacks');
  $('side').innerHTML=NAV.map(([i,n,k])=>k?`<a data-nav="${k}" class="${k===cur?'on':''}"><i>${i}</i>${n}</a>`:`<a class=off title="Not built yet" aria-disabled=true><i>${i}</i>${n}<span class=soon>soon</span></a>`).join('')+'<div class=ver>deploy-agent v@@VERSION@@</div>'}
-function go(n){if(n==='logs'){S.tab='logs';setTabs();return}
+function showPage(){$('stackpage').style.display=S.page?'none':'';$('syspage').style.display=S.page?'':'none';$('runbtn').style.visibility=S.page?'hidden':'';renderSide()}
+const tbl=(cols,rows)=>rows.length?`<table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${cols.map(c=>`<td>${c[1](r)}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'';
+async function loadSys(){const pg=S.page;if(!pg)return;const el=$('syspage');
+ if(pg==='activity'){const q=(document.getElementById('actq')||{}).value||'';const r=await api('/api/activity?limit=300&q='+enc(q));if(S.page!==pg)return;
+  const v=r.j.verified||{};const badge=(k)=>v[k]===null||v[k]===undefined?`<span class=tag2>${k}: no log yet</span>`:v[k]?`<span class=tag2>${k}: chain verified ✓</span>`:`<span class=tag2 style="border-color:#c0392b;color:#c0392b">${k}: chain BROKEN</span>`;
+  el.innerHTML=`<div class=sys><h2>Activity</h2><div class=mu>Deploy events (audit.jsonl) and what you did in this dashboard (fixes, runs, container removals). Both logs are hash-chained.</div>
+  <div class=tools><input id=actq placeholder="filter, e.g. fix.applied or dev-platform" value="${esc(q)}"><button class=sm data-sys-refresh>Refresh</button>${badge('deploy')}${badge('dashboard')}</div>
+  ${r.ok&&r.j.items.length?tbl([['Time',i=>esc(new Date(i.ts*1000).toLocaleString())],['Source',i=>esc(i.source)],['Event',i=>`<b>${esc(i.event)}</b>`],['Version',i=>esc(i.version||'')],['Details',i=>`<span class=mu>${esc(i.summary)}</span>`]],r.j.items):'<div class=empty>No events yet. Apply a fix or run a pipeline and it shows up here.</div>'}</div>`;return}
+ const r=await api('/api/sys/'+pg);if(S.page!==pg)return;const j=r.j;
+ const cols={containers:[['Name',i=>`<b>${esc(i.name)}</b>${i.agent?' <span class=tag2>deploy-agent</span>':''}`],['Image',i=>esc(i.image)],['State',i=>esc(i.state)],['Ports',i=>esc(i.ports)],['Status',i=>esc(i.status)],['',i=>i.agent?`<button class="sm danger" data-rm="${esc(i.name)}">Remove</button>`:'']],
+  volumes:[['Name',i=>`<span class=mono>${esc(i.name)}</span>`],['Driver',i=>esc(i.driver)],['Scope',i=>esc(i.scope)]],
+  networks:[['Name',i=>`<b>${esc(i.name)}</b>`],['Driver',i=>esc(i.driver)],['Scope',i=>esc(i.scope)],['ID',i=>`<span class="mu mono">${esc(i.id)}</span>`]]}[pg];
+ el.innerHTML=`<div class=sys><h2>${SYS[pg]}</h2><div class=mu>Read-only view of the local Docker daemon.${pg==='containers'?' You can remove only containers started by deploy-agent.':''}</div>
+  <div class=tools><button class=sm data-sys-refresh>Refresh</button></div>
+  ${!j.ok?`<div class=empty>${esc(j.error)}</div>`:j.items.length?tbl(cols,j.items):`<div class=empty>No ${pg} found.</div>`}</div>`}
+async function sysRemove(btn){if(btn.dataset.sure!=='1'){btn.dataset.sure='1';btn.textContent='Confirm remove';return}
+ btn.disabled=true;const r=await api('/api/container/remove',{method:'POST',body:JSON.stringify({name:btn.dataset.rm})});if(!r.ok)alert(r.j.error||'failed');loadSys()}
+function go(n){if(SYS[n]){S.page=n;showPage();loadSys();return}
+ if(S.page){S.page=null;showPage()}
+ if(n==='logs'){S.tab='logs';setTabs();return}
  const dk=n==='images';const m=(S.data?S.data.matrix:S.stacks).find(x=>(x.kind==='docker')===dk);if(!m)return;
  S.stack=m.name;S.kind=m.kind||'tf';S.sel=dk?'lint':'checks';S.fixes=null;S.fixKey='';S.exKey='';S.last='';S.treeKey='';S.file=null;S.tab=dk?'image':'logs';poll();if(dk)loadExplain()}
 async function loadTopology(){const s=S.stack;const r=await api('/api/topology?'+qs());if(s!==S.stack)return;const b=$('wbbox');
@@ -560,6 +621,8 @@ async function loadExplain(){const r=await api('/api/explain?'+qs());if(!r.ok){$
 document.addEventListener('toggle',e=>{const k=e.target.dataset&&e.target.dataset.k;if(k&&e.target.tagName==='DETAILS')S.open[k]=e.target.open},true);
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('env'))e.target.click()});
 document.addEventListener('click',async e=>{const t=e.target;let el;
+ if(el=t.closest('[data-sys-refresh]')){loadSys();return}
+ if(el=t.closest('[data-rm]')){sysRemove(el);return}
  if(el=t.closest('[data-nav]')){go(el.dataset.nav);return}
  if(el=t.closest('[data-s]')){S.stack=el.dataset.s;S.kind=el.dataset.kind||'tf';S.sel=S.kind==='docker'?'lint':'checks';S.fixes=null;S.fixKey='';S.exKey='';S.last='';S.treeKey='';S.file=null;S.tab='logs';poll();return}
  if(el=t.closest('[data-j]')){S.sel=el.dataset.j;S.tab='logs';render();return}
@@ -572,4 +635,5 @@ document.addEventListener('click',async e=>{const t=e.target;let el;
  if(t.id==='fixundo'){await doFix(tgt(),'/api/fix/undo');return}
  if(t.id==='applybtn'){const r=await api('/api/apply',{method:'POST',body:JSON.stringify({stack:S.stack,confirm:$('confirm').value.trim()})});if(!r.ok){$('apperr').textContent=r.j.error;return}S.sel='apply';S.last='';poll()}});
 boot();
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='actq')loadSys()});
 </script>"""
