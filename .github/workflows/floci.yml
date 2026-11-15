@@ -25,9 +25,9 @@ jobs:
       matrix: ${{ steps.c.outputs.matrix }}
       any: ${{ steps.c.outputs.any }}
     steps:
-      - uses: actions/checkout@v4       # TODO: pin actions to commit SHAs (supply-chain)
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0 }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
       - run: pip install -e .
       - id: c
@@ -52,14 +52,15 @@ jobs:
       AWS_SECRET_ACCESS_KEY: test
       AWS_DEFAULT_REGION: ${{ matrix.region }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with: { terraform_version: "1.9.8", terraform_wrapper: false }
       - run: pip install -e . checkov
-      - uses: terraform-linters/setup-tflint@v4
-      - uses: aquasecurity/setup-trivy@v0.2.3   # verify the current tag before relying on it
+      - uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with: { version: v0.69.3 }   # known-safe binary; v0.69.4 was malicious
       - name: Wait for Floci
         run: |
           for i in $(seq 1 30); do curl -fsS http://localhost:4566/_localstack/health >/dev/null && exit 0; sleep 2; done
@@ -83,7 +84,7 @@ jobs:
           cat out/${{ matrix.stack }}/summary.md >> "$GITHUB_STEP_SUMMARY" || true
           [ "${{ github.event_name }}" = pull_request ] && gh pr comment ${{ github.event.pull_request.number }} --body-file out/${{ matrix.stack }}/summary.md || true
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: floci-${{ matrix.stack }}
           path: out/${{ matrix.stack }}/
