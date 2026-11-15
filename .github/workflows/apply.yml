@@ -1,0 +1,87 @@
+# Main pipeline: plan (read-only role) -> artifact -> apply (write role, behind GitHub Environment approval).
+# Stacks are applied sequentially in env order (dev -> staging -> prod), fail-fast.
+# GitHub Environments `dev|staging|prod`: staging/prod need required reviewers + "prevent self-review";
+# restrict deployment branches to `main`. The OIDC trust on apply roles must pin
+#   sub = repo:<org>/<repo>:environment:<env>   (so only an approved environment job can assume it).
+name: apply
+on:
+  push:
+    branches: [main]
+    paths: ["stacks/**", "modules/**", "config/**", "specs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.c.outputs.matrix }}
+      any: ${{ steps.c.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e .
+      - id: c
+        run: deploy-agent changed --base ${{ github.event.before || 'HEAD~1' }}
+
+  plan:
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.8", terraform_wrapper: false }
+      - run: pip install -e .
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: "${{ matrix.plan_role }}", aws-region: "${{ matrix.region }}" }
+      - id: plan
+        run: deploy-agent plan --stack ${{ matrix.stack }} --spec specs/${{ matrix.stack }}.yaml
+      - run: cat out/${{ matrix.stack }}/summary.md >> "$GITHUB_STEP_SUMMARY"   # reviewer reads this at the approval prompt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan-${{ matrix.stack }}
+          path: out/${{ matrix.stack }}/
+          retention-days: 1       # tfplan can contain secrets: private repo only, short retention
+
+  apply:
+    needs: [detect, plan]
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1             # promotion order from `changed` (dev -> staging -> prod)
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    environment: ${{ matrix.env }}   # <- human approval gate lives here
+    concurrency:
+      group: tf-${{ matrix.stack }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.8", terraform_wrapper: false }
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with: { name: "plan-${{ matrix.stack }}", path: "out/${{ matrix.stack }}" }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { role-to-assume: "${{ matrix.apply_role }}", aws-region: "${{ matrix.region }}" }
+      - name: Apply saved plan (re-verifies hash, spec, commit; re-runs gate)
+        run: deploy-agent apply --stack ${{ matrix.stack }} --approved-by "${{ github.actor }}"
+      - name: Wait for ArgoCD (needs runner->Argo reachability)
+        if: matrix.argocd_app != ''
+        env:
+          ARGOCD_SERVER: ${{ vars.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}   # project-scoped, get+sync only
+        run: deploy-agent wait --app ${{ matrix.argocd_app }} --timeout 900

@@ -1,0 +1,46 @@
+# Registry = the agent's entire authority. Anything not listed here cannot be deployed.
+# Replace paths/accounts/roles with yours. Order of promotion is derived from `env`.
+shared_paths: ["modules/"]   # a change here triggers plan for ALL stacks
+
+stacks:
+  dev-platform:
+    path: stacks/dev/platform
+    env: dev
+    account_id: "000000000000"          # Floci/emulator account id
+    region: eu-central-1
+    plan_role:  arn:aws:iam::000000000000:role/gh-tf-plan-dev
+    apply_role: arn:aws:iam::000000000000:role/gh-tf-apply-dev
+    allowed_vars: [bucket_name]
+    max_changes: 40
+    argocd_app: null
+    # checks: {trivy: warn}   # per-check mode: block | warn | off (default: dev=warn, staging/prod=block)
+
+  # staging-platform:
+  #   path: stacks/staging/platform
+  #   env: staging
+  #   account_id: "111111111111"
+  #   region: eu-central-1
+  #   plan_role:  arn:aws:iam::111111111111:role/gh-tf-plan-staging
+  #   apply_role: arn:aws:iam::111111111111:role/gh-tf-apply-staging
+  #   allowed_vars: [cluster_version, node_desired_size]
+  #   argocd_app: platform-staging
+
+  # prod-platform:
+  #   path: stacks/prod/platform
+  #   env: prod
+  #   account_id: "222222222222"
+  #   region: eu-central-1
+  #   plan_role:  arn:aws:iam::222222222222:role/gh-tf-plan-prod
+  #   apply_role: arn:aws:iam::222222222222:role/gh-tf-apply-prod
+  #   allowed_vars: [node_desired_size]
+  #   max_changes: 15
+  #   argocd_app: platform-prod
+
+# Container apps built and tested locally by the Docker pipeline (path is relative to --root).
+# checks: captain | hadolint | trivy | vulns -> block | warn | off  (default: block, vulns: warn)
+apps:
+  sample-app:
+    path: apps/sample-app
+    image: deploy-agent/sample-app
+    port: 8080
+    health_path: /healthz

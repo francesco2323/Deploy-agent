@@ -1,0 +1,4 @@
+stack: dev-platform
+vars:
+  bucket_name: "deploy-agent-test-1"
+allow_destroy: false

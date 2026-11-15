@@ -1,0 +1,31 @@
+name: docker
+# Lint, build, scan and smoke-test every container app. Local to the runner: nothing is pushed anywhere.
+on:
+  pull_request:
+    paths: ["apps/**", ".github/workflows/docker.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [sample-app]   # keep in sync with `apps:` in config/stacks.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e .
+      - name: Install hadolint
+        run: |
+          sudo wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+      - uses: aquasecurity/setup-trivy@v0.2.3   # tag unverified: pin to a commit SHA you trust
+      - run: deploy-agent --root . docker --app ${{ matrix.app }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-${{ matrix.app }}
+          path: out/${{ matrix.app }}/

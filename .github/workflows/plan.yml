@@ -1,0 +1,77 @@
+# PR pipeline: read-only. Plans every affected stack, runs the gate, comments the result.
+# Required status checks on main: `test`, `plan` (all matrix legs).
+name: plan
+on:
+  pull_request:
+    paths: ["stacks/**", "modules/**", "config/**", "src/**"]
+
+permissions:
+  contents: read
+  id-token: write        # OIDC -> AWS (plan role is read-only)
+  pull-requests: write   # PR comment
+
+concurrency:
+  group: plan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4       # TODO: pin all actions to commit SHAs (supply-chain)
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]" && pytest -q
+
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.c.outputs.matrix }}
+      any: ${{ steps.c.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e .
+      - id: c
+        run: deploy-agent changed --base origin/${{ github.base_ref }}
+
+  plan:
+    needs: [detect, test]
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.8", terraform_wrapper: false }
+      - run: pip install -e . checkov
+      - uses: terraform-linters/setup-tflint@v4
+      - uses: aquasecurity/setup-trivy@v0.2.3   # verify the current tag before relying on it
+      - name: Static checks (fmt, tflint, trivy, checkov) -> PR annotations
+        run: deploy-agent checks --stack ${{ matrix.stack }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ matrix.plan_role }}
+          aws-region: ${{ matrix.region }}
+          role-session-name: plan-${{ github.run_id }}
+      - id: plan
+        run: |
+          set +e
+          deploy-agent plan --stack ${{ matrix.stack }} --spec specs/${{ matrix.stack }}.yaml | tee plan.md
+          echo "rc=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+      - name: Summary + PR comment
+        if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          cat out/${{ matrix.stack }}/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+          gh pr comment ${{ github.event.pull_request.number }} --body-file out/${{ matrix.stack }}/summary.md || true
+      - name: Fail on policy deny
+        if: steps.plan.outputs.rc == '3'
+        run: exit 1
