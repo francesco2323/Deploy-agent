@@ -51,3 +51,13 @@ def test_trivy_actions_are_never_the_hijacked_tags_and_the_binary_is_pinned():
     assert "setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514" in text       # v0.2.6
     assert "v0.69.4" not in text.replace("v0.69.4 was malicious", "")
     assert text.count("version: v0.69.3") >= 3
+
+
+def test_hadolint_download_is_checksum_verified():
+    assert "sha256sum -c" in _all()["docker.yml"]
+
+
+def test_nightly_scan_never_pushes_and_uses_the_known_safe_trivy():
+    text = _all()["nightly-scan.yml"]
+    assert "push: true" not in text and "docker/login-action" not in text
+    assert "schedule" in yaml.safe_load(text)[True] and "version: v0.69.3" in text

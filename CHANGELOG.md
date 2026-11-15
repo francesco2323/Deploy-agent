@@ -3,9 +3,13 @@ Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer]
 
 ## [Unreleased]
 ### Security
-- CLI image: upgrade `zlib1g` for the fixed Debian build (HIGH CVE-2026-85091), found by the new image scan.
+- CLI image: upgrade `zlib1g` for the fixed Debian build (DSA-6613-1: HIGH CVE-2026-85091; Trivy also maps CVE-2026-76844 to it), found by the new image scan.
+- CLI image: base is `python:3.12-slim-trixie` (explicit Debian suite instead of a floating `slim`). Digest pinning stays a manual step (see README).
+- `docker.yml`: the hadolint binary is verified against its release SHA-256 before install (it was an unverified download).
 ### Added
 - `ci.yml` `image-scan`: builds the CLI image on every PR, scans it with Trivy, writes HIGH/CRITICAL findings to the job summary (package, installed, fixed-in) and the Security tab, and fails on findings that have a fix (`scripts/trivy_summary.py`).
+- `nightly-scan.yml`: daily build of `main` plus Trivy scan; unfixed findings are listed in the job summary, fixable HIGH/CRITICAL fail the run (drift detection between PRs).
+- `.github/dependabot.yml`: weekly Docker base-image updates. GitHub Actions are intentionally excluded: they are bumped by hand after checking Aqua's advisory.
 
 ## [0.1.1] - 2026-11-15
 ### Fixed

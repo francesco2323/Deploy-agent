@@ -28,8 +28,9 @@ jobs:
       - name: Install hadolint
         if: steps.has.outputs.ok == 'true'
         run: |
-          sudo wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
-          sudo chmod +x /usr/local/bin/hadolint
+          wget -qO /tmp/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          echo "56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010  /tmp/hadolint" | sha256sum -c -   # v2.12.0 release checksum
+          sudo install -m 0755 /tmp/hadolint /usr/local/bin/hadolint
       - if: steps.has.outputs.ok == 'true'
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with: { version: v0.69.3 }   # known-safe binary; v0.69.4 was malicious

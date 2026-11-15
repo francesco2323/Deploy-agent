@@ -36,6 +36,7 @@ CI never touches AWS or anything billable: no OIDC, no `configure-aws-credential
 ## Supply chain
 All `uses:` are pinned to a 40-char commit SHA with the tag in a trailing comment (test-enforced). Bump deliberately: resolve the tag with `git ls-remote --tags <repo> <tag>^{}`, read the release notes, change SHA and comment together. Trivy: `trivy-action` v0.35.0 / `setup-trivy` v0.2.6 / binary v0.69.3 are the known-safe set after the March 2026 compromise; do not move to a newer tag without checking Aqua's advisory.
 
+- Nightly drift scan: `nightly-scan.yml` builds `main` and runs the same gate daily (unfixed findings listed, fixable fail). hadolint in `docker.yml` is verified by SHA-256. Base image: `python:3.12-slim-trixie`; Dependabot (`docker` only, never `github-actions`) proposes bumps; digest pinning is manual.
 - PR image gate: `ci.yml` job `image-scan` (same HIGH/CRITICAL-with-fix rule as the release). Add it to the required checks once it has been green once.
 
 ## Change protocol
