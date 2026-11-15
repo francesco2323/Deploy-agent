@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer]
 ## [0.1.1] - 2026-11-15
 ### Fixed
 - `release.yml` image job failed: `aquasecurity/trivy-action@0.28.0` does not exist (tags are `v`-prefixed). v0.1.0 therefore has no Docker Hub image.
+- `docker.yml` crashed with a traceback when `apps/sample-app` is absent (here the sample app lives in `tests/fixtures`); it now skips with a notice.
 ### Security
 - Every GitHub Action is now pinned to a full commit SHA (`tests/test_workflows.py` enforces it). In March 2026, 76 of 77 `trivy-action` tags and all but one `setup-trivy` tag were force-pushed to credential-stealing code; we use `trivy-action` v0.35.0 and `setup-trivy` v0.2.6, the known-safe releases, and pin the Trivy binary to v0.69.3 (v0.69.4 was malicious). `docker.yml` previously used `setup-trivy@v0.2.3`, a tag in the affected range, but it only runs on pull requests that touch `apps/**`.
 ### Changed
