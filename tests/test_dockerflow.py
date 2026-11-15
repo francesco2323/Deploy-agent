@@ -9,7 +9,7 @@ from deploy_agent.pipeline import Recorder
 from deploy_agent.spec import App
 from fakedocker import FakeDocker
 
-SAMPLE = Path(__file__).resolve().parents[2] / "infra-test" / "apps" / "sample-app"
+SAMPLE = Path(__file__).resolve().parent / "fixtures" / "sample-app"
 
 
 @pytest.fixture

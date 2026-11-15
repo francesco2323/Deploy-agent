@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 from . import dockerfile as dfile
-from . import dockerflow, remediate
+from . import __version__, dockerflow, remediate
 from .gitops import Argo
 from .pipeline import Recorder, execute_apply, execute_pipeline, new_run, skeleton, snapshot
 from .runner import run
@@ -169,7 +169,7 @@ def make_server(reg, root: Path, out_root: Path, specs_dir: Path, make_deployer,
             if not self._guard(q):
                 return
             if u.path == "/":
-                return self._send(200, PAGE, "text/html; charset=utf-8")
+                return self._send(200, PAGE.replace("@@VERSION@@", __version__), "text/html; charset=utf-8")
             d = {k: v[0] for k, v in q.items()}
             if u.path == "/api/stacks":
                 return self._send(200, matrix())
@@ -397,6 +397,7 @@ table.res{width:100%;border-collapse:collapse}table.res td,table.res th{text-ali
 .side a{display:flex;gap:10px;align-items:center;padding:7px 10px;border-radius:6px;color:var(--mu);font-size:14px;cursor:pointer}
 .side a:hover{background:var(--hv);color:var(--tx)}.side a.on{background:var(--hv);color:var(--tx);font-weight:600}
 .side a.off{opacity:.45;cursor:default}.side a.off:hover{background:none;color:var(--mu)}
+.side .ver{margin-top:auto;padding:8px 10px;font-size:11px;color:var(--mu)}
 .side a i{font-style:normal;width:18px;text-align:center}.side .soon{margin-left:auto;font-size:10px;border:1px solid var(--bd);border-radius:999px;padding:0 6px}
 .envs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:14px 0}
 .env{border:1px solid var(--bd);border-radius:10px;padding:12px 14px;background:var(--sub);cursor:pointer}.env:hover{background:var(--hv)}.env.on{border-color:var(--bl);box-shadow:0 0 0 1px var(--bl)}
@@ -519,7 +520,7 @@ function envCard(m){const s=BAN[m.status]?m.status:'idle',sel=m.name===S.stack;
  return `<div class="env ${sel?'on':''}" data-s="${esc(m.name)}" data-kind="${esc(m.kind)}" role=button tabindex=0><div class=hd>${ic(s==='idle'?'pending':s)}<span>${esc(m.name)}</span><span class=tag>${esc(m.env)}</span><span class=tag>${m.kind==='docker'?'docker':'terraform'}</span></div><div class="ban ${s}">${BAN[s]}${n?' · '+n+' finding'+(n==1?'':'s'):''}</div></div>`}
 const NAV=[['▦','Dashboard'],['▢','Containers'],['≣','Logs','logs'],['>','Shell'],['≋','Stacks','stacks'],['▣','Images','images'],['▭','Volumes'],['⌘','Networks'],['⇣','Registry'],['∿','Activity'],['◷','Schedules'],['⚙','Settings']];
 function renderSide(){const cur=S.kind==='docker'?'images':'stacks';
- $('side').innerHTML=NAV.map(([i,n,k])=>k?`<a data-nav="${k}" class="${k===cur?'on':''}"><i>${i}</i>${n}</a>`:`<a class=off title="Not built yet" aria-disabled=true><i>${i}</i>${n}<span class=soon>soon</span></a>`).join('')}
+ $('side').innerHTML=NAV.map(([i,n,k])=>k?`<a data-nav="${k}" class="${k===cur?'on':''}"><i>${i}</i>${n}</a>`:`<a class=off title="Not built yet" aria-disabled=true><i>${i}</i>${n}<span class=soon>soon</span></a>`).join('')+'<div class=ver>deploy-agent v@@VERSION@@</div>'}
 function go(n){if(n==='logs'){S.tab='logs';setTabs();return}
  const dk=n==='images';const m=(S.data?S.data.matrix:S.stacks).find(x=>(x.kind==='docker')===dk);if(!m)return;
  S.stack=m.name;S.kind=m.kind||'tf';S.sel=dk?'lint':'checks';S.fixes=null;S.fixKey='';S.exKey='';S.last='';S.treeKey='';S.file=null;S.tab=dk?'image':'logs';poll();if(dk)loadExplain()}

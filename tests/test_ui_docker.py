@@ -11,7 +11,7 @@ from deploy_agent.ui import make_server
 from fakedocker import FakeDocker
 from test_ui import TOKEN, call
 
-SAMPLE = Path(__file__).resolve().parents[2] / "infra-test" / "apps" / "sample-app"
+SAMPLE = Path(__file__).resolve().parent / "fixtures" / "sample-app"
 
 
 def serve(tmp_path, monkeypatch=None):
@@ -123,3 +123,11 @@ def test_topology_endpoint_reflects_the_dockerfile_and_is_docker_only(tmp_path):
         assert call(port, "/api/topology?app=a")[0] == 404
     finally:
         srv.shutdown()
+
+
+def test_dashboard_shows_the_version_and_leaves_no_placeholder():
+    from deploy_agent import __version__
+    from deploy_agent.ui import PAGE
+    html = PAGE.replace("@@VERSION@@", __version__)
+    assert "deploy-agent v@@VERSION@@" in PAGE and f"deploy-agent v{__version__}" in html
+    assert "@@VERSION@@" not in html

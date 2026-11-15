@@ -19,7 +19,7 @@ Pick `sample-app` in the matrix (or `deploy-agent --root <infra> docker --app sa
 
 ## Test now against Floci (your machine)
 ```bash
-pip install -e ".[dev]" && pytest -q                       # 86 hermetic tests, no AWS or Docker needed
+pip install -e ".[dev]" && pytest -q                       # 91 hermetic tests, no AWS or Docker needed
 export DEPLOY_AGENT_EMULATOR=http://172.17.0.2:4566         # Floci endpoint from the console
 deploy-agent --root /path/to/your/infra-repo plan   --stack dev-platform --spec specs/dev-platform.yaml
 deploy-agent --root /path/to/your/infra-repo deploy --stack dev-platform --spec specs/dev-platform.yaml
@@ -46,6 +46,7 @@ deploy-agent deploy --stack dev-platform --spec specs/dev-platform.yaml         
 Dashboard GitOps panel: set `argocd_app` for the stack in `config/stacks.yaml`, and start `deploy-agent ui` with `ARGOCD_OPTS="--core"` (uses your kubeconfig for the Floci k3s cluster, no Argo login) or `ARGOCD_SERVER` + `ARGOCD_AUTH_TOKEN`. Needs the `argocd` CLI.
 
 ## GitHub pipeline
+- `ci.yml` (PR + main): pytest on py3.11-3.13, wheel build + `--version` smoke. `release.yml` (tag `vX.Y.Z`): verifies tag == version == changelog and on `main`, builds, creates the GitHub Release with `SHA256SUMS`. See CLAUDE.md > Versioning & release.
 - `plan.yml` (PR): pytest + plan every affected stack on a **read-only OIDC role**, gate, PR comment.
 - `apply.yml` (main): plan → artifact → apply behind **GitHub Environments** (`dev` auto, `staging`/`prod` required reviewers), sequential, then ArgoCD wait.
 - AWS: one OIDC provider per account; `plan_role` (ReadOnly + state read/lock) and `apply_role` (scoped, permission boundary). Apply-role trust must pin `sub = repo:ORG/REPO:environment:ENV`.

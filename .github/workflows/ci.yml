@@ -1,0 +1,45 @@
+# App CI: tests on the supported Pythons, wheel build, version/changelog consistency.
+# Required status check on main: `test`, `build`.  No cloud credentials anywhere in this workflow.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4       # TODO: pin actions to commit SHAs (supply-chain)
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}", cache: pip }
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install build
+      - run: python -m build
+      - name: Wheel installs and reports its version
+        run: |
+          python -m venv /tmp/v && /tmp/v/bin/pip install dist/*.whl
+          test "$(/tmp/v/bin/deploy-agent --version)" = "deploy-agent $(python -c 'import sys;sys.path.insert(0,"src");import deploy_agent;print(deploy_agent.__version__)')"
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist/, retention-days: 14 }
