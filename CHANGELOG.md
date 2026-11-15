@@ -2,6 +2,8 @@
 Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer](https://semver.org) (`0.y.z` until the fixer catalog and `/api/*` shapes settle).
 
 ## [Unreleased]
+### Security
+- CLI image: upgrade `zlib1g` for the fixed Debian build (HIGH CVE-2026-85091), found by the new image scan.
 ### Added
 - `ci.yml` `image-scan`: builds the CLI image on every PR, scans it with Trivy, writes HIGH/CRITICAL findings to the job summary (package, installed, fixed-in) and the Security tab, and fails on findings that have a fix (`scripts/trivy_summary.py`).
 
