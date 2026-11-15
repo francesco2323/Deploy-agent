@@ -38,3 +38,11 @@ def test_medium_and_clean_reports_pass(tmp_path):
 def test_critical_sorts_before_high_and_pipes_are_escaped(tmp_path):
     rc, md = run(tmp_path, [v("HIGH", "1", "a"), v("CRITICAL", "1", "b")])
     assert md.index("CRITICAL") < md.index("| HIGH") and "t\\|itle" in md
+
+
+def test_unfixed_are_grouped_by_cve_in_a_collapsed_block_below_the_fixable_table(tmp_path):
+    vs = [v("HIGH", "", "libblkid1"), v("HIGH", "", "mount"), v("HIGH", "9", "urllib3")]
+    rc, md = run(tmp_path, vs)
+    assert rc == 1 and "1 distinct CVEs with no fix yet (2 package findings)" in md
+    assert "`libblkid1`, `mount`" in md and md.count("| CVE-1 |") == 1
+    assert md.index("`urllib3`") < md.index("<details>")

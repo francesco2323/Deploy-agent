@@ -4,3 +4,7 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule: { interval: weekly }
+    ignore:
+      # The Python version is a deliberate change that comes with the CI test matrix (3.11-3.13), never a bot bump.
+      - dependency-name: python
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]

@@ -2,6 +2,9 @@
 Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer](https://semver.org) (`0.y.z` until the fixer catalog and `/api/*` shapes settle).
 
 ## [Unreleased]
+### Changed
+- `.github/dependabot.yml`: ignore Python minor/major base-image bumps (a bot PR moved the image to 3.15, untested by the 3.11-3.13 matrix, and failed the scan gate). Digest/patch updates still arrive.
+- `scripts/trivy_summary.py`: fixable findings stay in the main table; findings with no fix are grouped by CVE in a collapsed block (one CVE hit 11 util-linux packages).
 ### Security
 - CLI image: upgrade `zlib1g` for the fixed Debian build (DSA-6613-1: HIGH CVE-2026-85091; Trivy also maps CVE-2026-76844 to it), found by the new image scan.
 - CLI image: base is `python:3.12-slim-trixie` (explicit Debian suite instead of a floating `slim`). Digest pinning stays a manual step (see README).

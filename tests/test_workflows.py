@@ -61,3 +61,11 @@ def test_nightly_scan_never_pushes_and_uses_the_known_safe_trivy():
     text = _all()["nightly-scan.yml"]
     assert "push: true" not in text and "docker/login-action" not in text
     assert "schedule" in yaml.safe_load(text)[True] and "version: v0.69.3" in text
+
+
+def test_dependabot_never_bumps_the_python_version_or_github_actions():
+    cfg = yaml.safe_load((WF.parent / "dependabot.yml").read_text())
+    ups = cfg["updates"]
+    assert [u["package-ecosystem"] for u in ups] == ["docker"]
+    ign = ups[0]["ignore"][0]
+    assert ign["dependency-name"] == "python" and "version-update:semver-minor" in ign["update-types"]
