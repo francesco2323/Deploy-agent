@@ -2,6 +2,8 @@
 Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer](https://semver.org) (`0.y.z` until the fixer catalog and `/api/*` shapes settle).
 
 ## [Unreleased]
+### Changed
+- CLI image: dropped the `zlib1g` upgrade layer (DSA-6613-1); the digest-pinned base is expected to ship the fix. `image-scan` on this PR is the proof: if it fails on zlib1g, revert this change.
 ### Security
 - CLI image: base image pinned by digest (`python:3.12-slim-trixie@sha256:5e2bdb1b…`, multi-arch index, 3.12.16 built 2026-11-05). Dependabot keeps proposing patch/digest updates. The `zlib1g` upgrade layer stays until a pinned base is shown to ship `deb13u1` or later.
 ### Changed
