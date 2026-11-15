@@ -1,0 +1,28 @@
+name: nightly-scan
+# Drift detection: new CVEs land against an unchanged image. Builds main locally and scans it; nothing is pushed.
+# Unfixed findings are listed in the job summary but never fail; fixable HIGH/CRITICAL do (scripts/trivy_summary.py).
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build the CLI image
+        run: docker build -t deploy-agent:nightly --build-arg VERSION=nightly .
+      - name: Trivy (JSON)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          version: v0.69.3                 # known-safe binary; v0.69.4 was malicious
+          image-ref: deploy-agent:nightly
+          format: json
+          output: trivy.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - name: Summary + gate
+        run: python3 scripts/trivy_summary.py trivy.json "$GITHUB_STEP_SUMMARY"

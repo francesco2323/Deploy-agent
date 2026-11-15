@@ -55,7 +55,7 @@ Dashboard GitOps panel: set `argocd_app` for the stack in `config/stacks.yaml`, 
 - Floci validates plan/apply mechanics, state, and (EKS = k3s) the ArgoCD sync/health flow, but **not** IAM enforcement or IRSA. Use one sandbox AWS account for IAM truth.
 - `tfplan` artifacts may contain secrets: private repo, 1-day retention (consider encrypting).
 - Terraform has no true rollback: failures halt; recovery = revert PR + re-plan. State is never rewound automatically.
-- Docker steps are tested against a fake `docker` binary in CI-less sandboxes; the first real run (Docker Desktop, hadolint, trivy output formats) is yours. Digest-pinning the base image is not automatic: the fixer pins a version tag.
+- Docker steps are tested against a fake `docker` binary in CI-less sandboxes; the first real run (Docker Desktop, hadolint, trivy output formats) is yours. Digest-pinning the base image is not automatic: the fixer pins a version tag. For this repo's own CLI image, resolve the digest with `docker buildx imagetools inspect python:3.12-slim-trixie` and pin `FROM python:3.12-slim-trixie@sha256:...`; `nightly-scan.yml` scans `main` daily for new CVEs.
 - Actions are tag-pinned in the scaffold; pin to SHAs before prod.
 - Gate rules are a starter set; move to OPA/Checkov when rules outgrow Python, keep the `Decision` contract.
 - ArgoCD wait requires runner→Argo reachability (self-hosted runner/tunnel) or swap for Argo notifications → `repository_dispatch`.

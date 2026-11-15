@@ -1,0 +1,6 @@
+version: 2
+updates:
+  # Base images only. GitHub Actions stay hand-bumped (SHA + tag comment) after reading Aqua's advisory; see CLAUDE.md.
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
