@@ -2,6 +2,10 @@
 Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer](https://semver.org) (`0.y.z` until the fixer catalog and `/api/*` shapes settle).
 
 ## [Unreleased]
+
+## [0.1.2] - 2026-11-15
+First release with a published image. `v0.1.1` was tagged before the `zlib1g` fix, so its image job was blocked by the Trivy gate and nothing was pushed to Docker Hub.
+
 ### Security
 - CLI image: base image pinned by digest (`python:3.12-slim-trixie@sha256:5e2bdb1b…`, multi-arch index, 3.12.16 built 2026-11-05). Dependabot keeps proposing patch/digest updates. The `zlib1g` upgrade layer stays until a pinned base is shown to ship `deb13u1` or later.
 ### Changed
