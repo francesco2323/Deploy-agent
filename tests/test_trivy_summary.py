@@ -44,5 +44,5 @@ def test_unfixed_are_grouped_by_cve_in_a_collapsed_block_below_the_fixable_table
     vs = [v("HIGH", "", "libblkid1"), v("HIGH", "", "mount"), v("HIGH", "9", "urllib3")]
     rc, md = run(tmp_path, vs)
     assert rc == 1 and "1 distinct CVEs with no fix yet (2 package findings)" in md
-    assert "`libblkid1`, `mount`" in md and md.count("| CVE-1 |") == 1
+    assert "`libblkid1`, `mount`" in md and md.count("`libblkid1`") == 1
     assert md.index("`urllib3`") < md.index("<details>")
