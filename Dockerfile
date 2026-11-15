@@ -1,12 +1,12 @@
 # deploy-agent CLI image (no dashboard: the UI binds loopback by design).
 # Local build: docker build -t deploy-agent:dev --build-arg VERSION=dev .
-FROM python:3.12-slim-trixie AS build
+FROM python:3.15-slim-trixie AS build
 WORKDIR /src
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir build && python -m build --wheel --outdir /dist
 
-FROM python:3.12-slim-trixie
+FROM python:3.15-slim-trixie
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="deploy-agent" \
       org.opencontainers.image.version="${VERSION}" \
