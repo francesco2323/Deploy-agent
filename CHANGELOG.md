@@ -2,6 +2,8 @@
 Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer](https://semver.org) (`0.y.z` until the fixer catalog and `/api/*` shapes settle).
 
 ## [Unreleased]
+### Security
+- CLI image: base image pinned by digest (`python:3.12-slim-trixie@sha256:5e2bdb1b…`, multi-arch index, 3.12.16 built 2026-11-05). Dependabot keeps proposing patch/digest updates. The `zlib1g` upgrade layer stays until a pinned base is shown to ship `deb13u1` or later.
 ### Changed
 - `.github/dependabot.yml`: ignore Python minor/major base-image bumps (a bot PR moved the image to 3.15, untested by the 3.11-3.13 matrix, and failed the scan gate). Digest/patch updates still arrive.
 - `scripts/trivy_summary.py`: fixable findings stay in the main table; findings with no fix are grouped by CVE in a collapsed block (one CVE hit 11 util-linux packages).
