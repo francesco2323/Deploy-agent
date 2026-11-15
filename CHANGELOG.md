@@ -2,6 +2,10 @@
 Format: [Keep a Changelog](https://keepachangelog.com), versions follow [SemVer](https://semver.org) (`0.y.z` until the fixer catalog and `/api/*` shapes settle).
 
 ## [Unreleased]
+### Changed
+- CI no longer uses AWS: `plan.yml`/`apply.yml` (OIDC roles) replaced by `floci.yml` (Floci emulator service container). Guarded by `tests/test_workflows.py`.
+### Added
+- Root `Dockerfile` for the CLI (passes its own captain lint) and a Docker Hub publish job in `release.yml` (tag only, multi-arch, Trivy gate, SBOM + provenance, no `latest`).
 ### Fixed
 - Tests no longer depend on a sibling `infra-test` folder: the sample app is vendored in `tests/fixtures/sample-app` (a clean checkout failed 21 tests).
 

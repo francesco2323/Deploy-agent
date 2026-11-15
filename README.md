@@ -47,10 +47,9 @@ Dashboard GitOps panel: set `argocd_app` for the stack in `config/stacks.yaml`, 
 
 ## GitHub pipeline
 - `ci.yml` (PR + main): pytest on py3.11-3.13, wheel build + `--version` smoke. `release.yml` (tag `vX.Y.Z`): verifies tag == version == changelog and on `main`, builds, creates the GitHub Release with `SHA256SUMS`. See CLAUDE.md > Versioning & release.
-- `plan.yml` (PR): pytest + plan every affected stack on a **read-only OIDC role**, gate, PR comment.
-- `apply.yml` (main): plan → artifact → apply behind **GitHub Environments** (`dev` auto, `staging`/`prod` required reviewers), sequential, then ArgoCD wait.
-- AWS: one OIDC provider per account; `plan_role` (ReadOnly + state read/lock) and `apply_role` (scoped, permission boundary). Apply-role trust must pin `sub = repo:ORG/REPO:environment:ENV`.
-- Branch protection: required checks `test` + `plan`; CODEOWNERS on `config/stacks.yaml`, `modules/`, `stacks/prod/`.
+- `floci.yml` (PR/main): static checks + plan + apply of changed stacks against a **Floci** service container (no AWS account, nothing billable). `release.yml` also pushes the CLI image (root `Dockerfile`) to Docker Hub on a tag when `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` are set.
+- Branch protection on `main`: no direct pushes; required checks `test` + `build` (ci.yml); CODEOWNERS on `config/stacks.yaml`, `modules/`.
+- No real AWS in CI by design (OIDC/role-based plan+apply workflows were removed); see CLAUDE.md > No real cloud.
 
 ## Known limits / risks
 - Floci validates plan/apply mechanics, state, and (EKS = k3s) the ArgoCD sync/health flow, but **not** IAM enforcement or IRSA. Use one sandbox AWS account for IAM truth.

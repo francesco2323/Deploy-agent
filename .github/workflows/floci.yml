@@ -1,0 +1,90 @@
+# Terraform stacks, fully local: plan + apply run against Floci (free AWS emulator, MIT, no account) in a service
+# container. No AWS account, no OIDC, no cloud credentials, nothing billable. State lives and dies with the job.
+# Floci proves plan/gate/apply/state mechanics, NOT real IAM/IRSA/networking behaviour (see README).
+name: floci
+on:
+  pull_request:
+    paths: ["stacks/**", "modules/**", "config/**", "specs/**", "src/**"]
+  push:
+    branches: [main]
+    paths: ["stacks/**", "modules/**", "config/**", "specs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write   # PR comment with the plan summary
+
+concurrency:
+  group: floci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.c.outputs.matrix }}
+      any: ${{ steps.c.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4       # TODO: pin actions to commit SHAs (supply-chain)
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e .
+      - id: c
+        run: deploy-agent changed --base "${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before || 'HEAD~1' }}"
+
+  stack:
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    services:
+      floci:
+        image: floci/floci:latest        # TODO: pin an x.y.z tag once you have validated one
+        ports: ["4566:4566"]
+    env:
+      DEPLOY_AGENT_EMULATOR: http://localhost:4566
+      AWS_ACCESS_KEY_ID: test            # dummy values the AWS provider insists on; never real
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ${{ matrix.region }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.8", terraform_wrapper: false }
+      - run: pip install -e . checkov
+      - uses: terraform-linters/setup-tflint@v4
+      - uses: aquasecurity/setup-trivy@v0.2.3   # verify the current tag before relying on it
+      - name: Wait for Floci
+        run: |
+          for i in $(seq 1 30); do curl -fsS http://localhost:4566/_localstack/health >/dev/null && exit 0; sleep 2; done
+          echo "Floci did not become healthy"; exit 1
+      - name: Static checks (fmt, tflint, trivy, checkov)
+        run: deploy-agent checks --stack ${{ matrix.stack }}
+      - id: plan
+        run: |
+          set +e
+          deploy-agent plan --stack ${{ matrix.stack }} --spec specs/${{ matrix.stack }}.yaml | tee plan.md
+          echo "rc=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+      - name: Fail on policy deny
+        if: steps.plan.outputs.rc == '3'
+        run: exit 1
+      - name: Apply the saved plan to Floci (re-verifies hash, spec, commit; re-runs the gate)
+        run: deploy-agent apply --stack ${{ matrix.stack }} --approved-by "floci-ci"
+      - name: Summary + PR comment
+        if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          cat out/${{ matrix.stack }}/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+          [ "${{ github.event_name }}" = pull_request ] && gh pr comment ${{ github.event.pull_request.number }} --body-file out/${{ matrix.stack }}/summary.md || true
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: floci-${{ matrix.stack }}
+          path: out/${{ matrix.stack }}/
+          retention-days: 7
