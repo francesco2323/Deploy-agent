@@ -14,18 +14,19 @@ jobs:
       matrix:
         app: [sample-app]   # keep in sync with `apps:` in config/stacks.yaml
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
       - run: pip install -e .
       - name: Install hadolint
         run: |
           sudo wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
           sudo chmod +x /usr/local/bin/hadolint
-      - uses: aquasecurity/setup-trivy@v0.2.3   # tag unverified: pin to a commit SHA you trust
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with: { version: v0.69.3 }   # known-safe binary; v0.69.4 was malicious
       - run: deploy-agent --root . docker --app ${{ matrix.app }}
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: docker-${{ matrix.app }}
           path: out/${{ matrix.app }}/

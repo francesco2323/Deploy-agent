@@ -33,6 +33,9 @@ Deterministic AWS/Terraform + GitOps deploy agent. Same CLI for local, Floci (em
 ## No real cloud
 CI never touches AWS or anything billable: no OIDC, no `configure-aws-credentials`, no role ARNs in workflows (`tests/test_workflows.py` enforces it). Terraform plan/apply in CI runs against **Floci** (`floci/floci`, free MIT AWS emulator) as a service container (`floci.yml`); state is ephemeral. Images: only `release.yml` pushes, only to Docker Hub, only on a `vX.Y.Z` tag, tagged `X.Y.Z` + `sha-<commit>` (never `latest`), after a Trivy gate; it needs repo variable `DOCKERHUB_USERNAME` + secret `DOCKERHUB_TOKEN` and skips cleanly without them. The dashboard's own Docker pipeline stays local-only. Real-AWS apply was removed on purpose; reintroduce it only as a deliberate change.
 
+## Supply chain
+All `uses:` are pinned to a 40-char commit SHA with the tag in a trailing comment (test-enforced). Bump deliberately: resolve the tag with `git ls-remote --tags <repo> <tag>^{}`, read the release notes, change SHA and comment together. Trivy: `trivy-action` v0.35.0 / `setup-trivy` v0.2.6 / binary v0.69.3 are the known-safe set after the March 2026 compromise; do not move to a newer tag without checking Aqua's advisory.
+
 ## Change protocol
 After ANY change to this repo: update this file (invariants/commands), the README runbook, and any agent/skill definitions or global config (`~/.claude/CLAUDE.md`, `~/.claude.json` agents) that reference these commands or invariants. Add/adjust a gate test for every new rule.
 
