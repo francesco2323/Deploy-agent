@@ -16,6 +16,7 @@ First release with a published image. `v0.1.1` was tagged before the `zlib1g` fi
 - CLI image: base is `python:3.12-slim-trixie` (explicit Debian suite instead of a floating `slim`). Digest pinning stays a manual step (see README).
 - `docker.yml`: the hadolint binary is verified against its release SHA-256 before install (it was an unverified download).
 ### Added
+- Dashboard sidebar: **Containers**, **Volumes**, **Networks** (read-only docker inventory; only `deploy-agent-*` containers can be removed, with a confirm click) and **Activity** (merged, chain-verified view of `audit.jsonl` and the new `ui-events.jsonl`, filterable). Fixes, undo, docker runs and container removals are now recorded. Endpoints: `/api/sys/<kind>`, `/api/activity`, `/api/container/remove`.
 - `ci.yml` `image-scan`: builds the CLI image on every PR, scans it with Trivy, writes HIGH/CRITICAL findings to the job summary (package, installed, fixed-in) and the Security tab, and fails on findings that have a fix (`scripts/trivy_summary.py`).
 - `nightly-scan.yml`: daily build of `main` plus Trivy scan; unfixed findings are listed in the job summary, fixable HIGH/CRITICAL fail the run (drift detection between PRs).
 - `.github/dependabot.yml`: weekly Docker base-image updates. GitHub Actions are intentionally excluded: they are bumped by hand after checking Aqua's advisory.

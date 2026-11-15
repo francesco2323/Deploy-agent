@@ -43,6 +43,8 @@ deploy-agent deploy --stack dev-platform --spec specs/dev-platform.yaml         
 - Bootstrap Argo itself via Terraform (helm_release) or an app-of-apps root app, so it is covered by the same plan/gate.
 - Still not real in Floci: IRSA/OIDC trust, IAM enforcement, ELB/EBS CSI behaviour. Treat those as sandbox-account tests.
 
+Dashboard sidebar: Containers / Volumes / Networks are a read-only view of your local Docker daemon (you can remove only containers named `deploy-agent-*`, the ones the pipeline starts). Activity shows deploy events (`audit.jsonl`) and dashboard actions (`ui-events.jsonl`: fixes, undo, docker runs, removals); each log shows whether its hash chain verifies.
+
 Dashboard GitOps panel: set `argocd_app` for the stack in `config/stacks.yaml`, and start `deploy-agent ui` with `ARGOCD_OPTS="--core"` (uses your kubeconfig for the Floci k3s cluster, no Argo login) or `ARGOCD_SERVER` + `ARGOCD_AUTH_TOKEN`. Needs the `argocd` CLI.
 
 ## GitHub pipeline

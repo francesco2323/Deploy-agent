@@ -47,6 +47,15 @@ class FakeDocker:
                     return ok(o["exit"])
             if sub == "exec":
                 return ok(o["uid"])
+            if sub == "ps":
+                return ok("\n".join(json.dumps(c) for c in o.get("containers", [
+                    {"ID": "a1", "Names": "web", "Image": "nginx", "State": "running", "Status": "Up 2h", "Ports": "80/tcp", "CreatedAt": "x"},
+                    {"ID": "b2", "Names": "deploy-agent-sample-1700000000", "Image": "deploy-agent/a", "State": "exited", "Status": "Exited (0)", "Ports": "", "CreatedAt": "y"}])))
+            if sub == "volume":
+                return ok(json.dumps({"Name": "pgdata", "Driver": "local", "Scope": "local"}))
+            if sub == "network":
+                return ok("\n".join(json.dumps(n) for n in [{"ID": "n1", "Name": "bridge", "Driver": "bridge", "Scope": "local"},
+                                                           {"ID": "n2", "Name": "host", "Driver": "host", "Scope": "local"}]))
             if sub in ("stop", "rm", "logs"):
                 return ok("listening on :8080\nstopped cleanly")
         if a[0] == "trivy" and "image" in a:
