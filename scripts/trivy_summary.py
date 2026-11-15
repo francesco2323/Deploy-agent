@@ -25,20 +25,35 @@ def findings(report: dict) -> list[dict]:
     return sorted(out, key=lambda f: (ORDER[f["sev"]], f["pkg"], f["id"]))
 
 
+def _esc(s: str, n: int = 90) -> str:
+    return s.replace("|", "\\|")[:n]
+
+
 def render(found: list[dict]) -> tuple[str, int]:
     fixable = [f for f in found if f["fixed"]]
+    unfixed = [f for f in found if not f["fixed"]]
     lines = ["## Trivy image scan", ""]
     if not found:
         lines.append("No HIGH or CRITICAL vulnerabilities found.")
     else:
-        lines += [f"**{len(fixable)} fixable** and {len(found) - len(fixable)} without a fix (HIGH/CRITICAL). "
-                  "Only fixable findings fail the check.", "",
-                  "| Severity | Package | Installed | Fixed in | ID | Title |", "|---|---|---|---|---|---|"]
-        for f in found:
-            title = f["title"].replace("|", "\\|")[:90]
-            lines.append(f"| {f['sev']} | `{f['pkg']}` | {f['installed']} | {f['fixed'] or 'no fix yet'} | {f['id']} | {title} |")
+        lines += [f"**{len(fixable)} fixable** and {len(unfixed)} without a fix (HIGH/CRITICAL). "
+                  "Only fixable findings fail the check.", ""]
         if fixable:
-            lines += ["", "Fix: bump the base image or the package named above, rebuild, re-run."]
+            lines += ["| Severity | Package | Installed | Fixed in | ID | Title |", "|---|---|---|---|---|---|"]
+            for f in fixable:
+                lines.append(f"| {f['sev']} | `{f['pkg']}` | {f['installed']} | {f['fixed']} | {f['id']} | {_esc(f['title'])} |")
+            lines += ["", "Fix: bump the base image or the package named above, rebuild, re-run.", ""]
+        if unfixed:
+            by_id: dict[str, dict] = {}
+            for f in unfixed:
+                e = by_id.setdefault(f["id"], {"sev": f["sev"], "title": f["title"], "pkgs": set()})
+                e["pkgs"].add(f["pkg"])
+            lines += [f"<details><summary>{len(by_id)} distinct CVEs with no fix yet ({len(unfixed)} package findings)</summary>", "",
+                      "| Severity | ID | Packages | Title |", "|---|---|---|---|"]
+            for cid, e in sorted(by_id.items(), key=lambda kv: (ORDER[kv[1]["sev"]], kv[0])):
+                pk = ", ".join(f"`{x}`" for x in sorted(e["pkgs"]))
+                lines.append(f"| {e['sev']} | {cid} | {pk} | {_esc(e['title'])} |")
+            lines += ["", "</details>"]
     return "\n".join(lines) + "\n", (1 if fixable else 0)
 
 
